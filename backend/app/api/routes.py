@@ -193,6 +193,11 @@ def create_session(
 ) -> PomodoroSession:
     started_at = _to_utc_naive(payload.started_at) if payload.started_at else datetime.now(UTC).replace(tzinfo=None)
     finished_at = _to_utc_naive(payload.finished_at) if payload.finished_at else datetime.now(UTC).replace(tzinfo=None)
+    studied_minutes = (
+        payload.studied_minutes
+        if payload.studied_minutes is not None
+        else max((finished_at - started_at).total_seconds() / 60, 0)
+    )
 
     item = PomodoroSession(
         user_id=current_user.id,
@@ -203,7 +208,7 @@ def create_session(
         focus_minutes=payload.focus_minutes,
         break_minutes=payload.break_minutes,
         target_minutes=0,
-        completed_minutes=0,
+        completed_minutes=max(0, int(round(studied_minutes))),
         efficiency=payload.completion_percentage,
         started_at=started_at,
         finished_at=finished_at,

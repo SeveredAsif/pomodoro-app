@@ -88,6 +88,7 @@ function App() {
   const [mode, setMode] = useState<TimerMode>("focus");
   const [secondsLeft, setSecondsLeft] = useState(25 * 60);
   const [overtimeSeconds, setOvertimeSeconds] = useState(0);
+  const [activeFocusSeconds, setActiveFocusSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [awaitingLog, setAwaitingLog] = useState(false);
   const [sessionStartedAt, setSessionStartedAt] = useState<Date | null>(null);
@@ -149,6 +150,10 @@ function App() {
   }, [hourFilter, dateFilter, weekFilter, yearFilter]);
 
   function getStudiedMinutes(item: SessionRecord): number {
+    if (item.studied_minutes > 0) {
+      return Math.round(item.studied_minutes);
+    }
+
     const start = parseBackendTimestamp(item.started_at).getTime();
     const end = parseBackendTimestamp(item.finished_at).getTime();
     return Math.max(0, Math.round((end - start) / 60000));
@@ -174,6 +179,7 @@ function App() {
     setAwaitingLog(false);
     setIsRunning(false);
     setOvertimeSeconds(0);
+    setActiveFocusSeconds(0);
     setSessionStartedAt(null);
     setStatusMessage(message ?? "Logged out.");
   }
@@ -243,11 +249,12 @@ function App() {
   }, [authToken]);
 
   useEffect(() => {
-    if (!isRunning && mode === "focus" && !awaitingLog) {
+    if (mode === "focus" && !isRunning && !awaitingLog && sessionStartedAt === null) {
       setSecondsLeft(focusMinutes * 60);
       setOvertimeSeconds(0);
+      setActiveFocusSeconds(0);
     }
-  }, [focusMinutes, mode, isRunning, awaitingLog]);
+  }, [focusMinutes, mode, isRunning, awaitingLog, sessionStartedAt]);
 
   useEffect(() => {
     if (!isRunning && mode === "break") {
@@ -262,6 +269,7 @@ function App() {
 
     const timer = window.setInterval(() => {
       setSecondsLeft((prev) => Math.max(prev - 1, 0));
+      setActiveFocusSeconds((prev) => prev + 1);
     }, 1000);
 
     return () => window.clearInterval(timer);
@@ -285,6 +293,7 @@ function App() {
 
     const timer = window.setInterval(() => {
       setOvertimeSeconds((prev) => prev + 1);
+      setActiveFocusSeconds((prev) => prev + 1);
     }, 1000);
 
     return () => window.clearInterval(timer);
@@ -311,6 +320,7 @@ function App() {
     setMode("focus");
     setSecondsLeft(focusMinutes * 60);
     setOvertimeSeconds(0);
+    setActiveFocusSeconds(0);
     setStatusMessage("Break complete. Ready for the next focus sprint.");
   }, [secondsLeft, isRunning, mode, focusMinutes]);
 
@@ -384,6 +394,7 @@ function App() {
     setIsRunning(false);
     setAwaitingLog(false);
     setOvertimeSeconds(0);
+    setActiveFocusSeconds(0);
     setSecondsLeft(item.focus_minutes * 60);
     setStatusMessage(`Preset loaded: ${item.label}`);
   }
@@ -391,6 +402,7 @@ function App() {
   function startTimer(): void {
     if (mode === "focus" && !sessionStartedAt) {
       setSessionStartedAt(new Date());
+      setActiveFocusSeconds(0);
     }
 
     setIsRunning(true);
@@ -411,6 +423,7 @@ function App() {
     setIsRunning(false);
     setAwaitingLog(false);
     setOvertimeSeconds(0);
+    setActiveFocusSeconds(0);
     setSecondsLeft((mode === "focus" ? focusMinutes : breakMinutes) * 60);
     if (mode === "focus") {
       setSessionStartedAt(null);
@@ -431,6 +444,8 @@ function App() {
     setMode("focus");
     setSecondsLeft(focusMinutes * 60);
     setOvertimeSeconds(0);
+    setActiveFocusSeconds(0);
+    setSessionStartedAt(null);
     setStatusMessage("Break skipped. Back to focus mode.");
   }
 
@@ -473,10 +488,11 @@ function App() {
 
     setIsSaving(true);
 
-    const start = sessionStartedAt ?? new Date(Date.now() - focusMinutes * 60 * 1000);
+    const start = sessionStartedAt ?? new Date();
     const finish = new Date();
     const plannedSeconds = focusMinutes * 60;
-    const studiedSeconds = Math.max(1, Math.round((finish.getTime() - start.getTime()) / 1000));
+    const studiedSeconds = Math.max(activeFocusSeconds, 1);
+    const studiedMinutes = Math.round((studiedSeconds / 60) * 100) / 100;
     const overtimeLoggedSeconds = Math.max(studiedSeconds - plannedSeconds, 0);
     const overtimeLoggedMinutes = overtimeLoggedSeconds / 60;
 
@@ -488,6 +504,7 @@ function App() {
         completion_percentage: completionPercentage,
         focus_minutes: focusMinutes,
         break_minutes: breakMinutes,
+        studied_minutes: studiedMinutes,
         started_at: asISO(start),
         finished_at: asISO(finish),
       });
@@ -500,6 +517,7 @@ function App() {
       setAwaitingLog(false);
       setSessionStartedAt(null);
       setOvertimeSeconds(0);
+      setActiveFocusSeconds(0);
       setMode("break");
       setSecondsLeft(breakMinutes * 60);
       setActualStudyText("");

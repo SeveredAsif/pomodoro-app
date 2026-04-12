@@ -50,6 +50,7 @@ class PomodoroSessionCreate(BaseModel):
     completion_percentage: float = Field(ge=0, le=100)
     focus_minutes: int = Field(ge=1, le=240)
     break_minutes: int = Field(ge=1, le=120)
+    studied_minutes: float | None = Field(default=None, ge=0, le=1440)
     started_at: datetime | None = None
     finished_at: datetime | None = None
 
@@ -63,6 +64,7 @@ class PomodoroSessionRead(BaseModel):
     completion_percentage: float
     focus_minutes: int
     break_minutes: int
+    studied_minutes: float
     started_at: datetime
     finished_at: datetime
     created_at: datetime

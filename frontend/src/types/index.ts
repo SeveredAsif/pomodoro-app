@@ -37,6 +37,7 @@ export interface SessionCreatePayload {
   completion_percentage: number;
   focus_minutes: number;
   break_minutes: number;
+  studied_minutes: number;
   started_at: string;
   finished_at: string;
 }
@@ -50,6 +51,7 @@ export interface SessionRecord {
   completion_percentage: number;
   focus_minutes: number;
   break_minutes: number;
+  studied_minutes: number;
   started_at: string;
   finished_at: string;
   created_at: string;

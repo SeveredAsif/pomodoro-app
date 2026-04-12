@@ -42,3 +42,11 @@ class PomodoroSession(Base):
         default=lambda: datetime.now(UTC).replace(tzinfo=None),
         nullable=False,
     )
+
+    @property
+    def studied_minutes(self) -> float:
+        if self.completed_minutes > 0:
+            return float(self.completed_minutes)
+
+        duration = (self.finished_at - self.started_at).total_seconds() / 60
+        return max(duration, 0.0)
