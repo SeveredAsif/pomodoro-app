@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -109,6 +109,9 @@ function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
+  const focusTickRef = useRef<number | null>(null);
+  const secondsLeftRef = useRef(secondsLeft);
+  const awaitingLogRef = useRef(awaitingLog);
 
   const totalPhaseSeconds = useMemo(() => {
     return Math.max(1, (mode === "focus" ? focusMinutes : breakMinutes) * 60);
@@ -148,6 +151,14 @@ function App() {
 
     return filters;
   }, [hourFilter, dateFilter, weekFilter, yearFilter]);
+
+  useEffect(() => {
+    secondsLeftRef.current = secondsLeft;
+  }, [secondsLeft]);
+
+  useEffect(() => {
+    awaitingLogRef.current = awaitingLog;
+  }, [awaitingLog]);
 
   function getStudiedMinutes(item: SessionRecord): number {
     if (item.studied_minutes > 0) {
@@ -263,41 +274,63 @@ function App() {
   }, [breakMinutes, mode, isRunning]);
 
   useEffect(() => {
-    if (!isRunning || mode !== "focus" || secondsLeft <= 0) {
+    if (!isRunning || mode !== "focus") {
+      focusTickRef.current = null;
       return;
     }
 
-    const timer = window.setInterval(() => {
-      setSecondsLeft((prev) => Math.max(prev - 1, 0));
-      setActiveFocusSeconds((prev) => prev + 1);
-    }, 1000);
+    focusTickRef.current = Date.now();
 
-    return () => window.clearInterval(timer);
-  }, [isRunning, mode, secondsLeft]);
+    const advanceFocusTimer = (): void => {
+      const now = Date.now();
+      const previousTick = focusTickRef.current ?? now;
+      const elapsedSeconds = Math.floor((now - previousTick) / 1000);
 
-  useEffect(() => {
-    if (mode !== "focus" || secondsLeft !== 0) {
-      return;
-    }
+      if (elapsedSeconds <= 0) {
+        return;
+      }
 
-    if (!awaitingLog) {
+      focusTickRef.current = previousTick + elapsedSeconds * 1000;
+      setActiveFocusSeconds((prev) => prev + elapsedSeconds);
+
+      const remainingBeforeTick = secondsLeftRef.current;
+
+      if (awaitingLogRef.current || remainingBeforeTick <= 0) {
+        setOvertimeSeconds((prev) => prev + elapsedSeconds);
+        return;
+      }
+
+      if (elapsedSeconds < remainingBeforeTick) {
+        const nextRemaining = remainingBeforeTick - elapsedSeconds;
+        secondsLeftRef.current = nextRemaining;
+        setSecondsLeft(nextRemaining);
+        return;
+      }
+
+      const overflowSeconds = elapsedSeconds - remainingBeforeTick;
+      secondsLeftRef.current = 0;
+      awaitingLogRef.current = true;
+      setSecondsLeft(0);
       setAwaitingLog(true);
       setStatusMessage("Focus target reached. Timer is tracking overtime until you stop and log.");
-    }
-  }, [mode, secondsLeft, awaitingLog]);
 
-  useEffect(() => {
-    if (!isRunning || mode !== "focus" || !awaitingLog || secondsLeft !== 0) {
-      return;
-    }
+      if (overflowSeconds > 0) {
+        setOvertimeSeconds((prev) => prev + overflowSeconds);
+      }
+    };
 
-    const timer = window.setInterval(() => {
-      setOvertimeSeconds((prev) => prev + 1);
-      setActiveFocusSeconds((prev) => prev + 1);
-    }, 1000);
+    const timer = window.setInterval(advanceFocusTimer, 250);
+    const onVisibilityChange = (): void => {
+      advanceFocusTimer();
+    };
 
-    return () => window.clearInterval(timer);
-  }, [isRunning, mode, awaitingLog, secondsLeft]);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [isRunning, mode]);
 
   useEffect(() => {
     if (!isRunning || mode !== "break" || secondsLeft <= 0) {
