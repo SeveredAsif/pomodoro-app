@@ -110,12 +110,24 @@ export function createSession(payload: SessionCreatePayload): Promise<SessionRec
   });
 }
 
-export function getOverview(period: Period): Promise<StatsOverview> {
-  return request<StatsOverview>(`/stats/overview?period=${period}`);
+export function getOverview(period: Period, referenceDate?: string): Promise<StatsOverview> {
+  const params = new URLSearchParams();
+  params.set("period", period);
+  if (referenceDate) {
+    params.set("reference", referenceDate);
+  }
+
+  return request<StatsOverview>(`/stats/overview?${params.toString()}`);
 }
 
-export function getTimeline(period: Period): Promise<TimelineResponse> {
-  return request<TimelineResponse>(`/stats/timeline?period=${period}`);
+export function getTimeline(period: Period, referenceDate?: string): Promise<TimelineResponse> {
+  const params = new URLSearchParams();
+  params.set("period", period);
+  if (referenceDate) {
+    params.set("reference", referenceDate);
+  }
+
+  return request<TimelineResponse>(`/stats/timeline?${params.toString()}`);
 }
 
 export function getCompletion(): Promise<CompletionSnapshot> {

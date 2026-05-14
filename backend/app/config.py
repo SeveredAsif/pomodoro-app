@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
     jwt_secret_key: str = "change-this-in-production"
     jwt_algorithm: str = "HS256"
-    jwt_expire_minutes: int = 10080
+    jwt_expire_minutes: int = 5256000
 
     model_config = SettingsConfigDict(
         env_file=".env",

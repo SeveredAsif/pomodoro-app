@@ -46,6 +46,77 @@ type TimerMode = "focus" | "break";
 const PERIODS: Period[] = ["day", "week", "month", "year"];
 const LOGS_PAGE_SIZE = 20;
 
+function getCurrentBdDate(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Dhaka",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function formatBdDateTimeInputValue(value: Date): string {
+  const bdTime = new Date(value.getTime() + 6 * 60 * 60 * 1000);
+  const year = bdTime.getUTCFullYear();
+  const month = String(bdTime.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(bdTime.getUTCDate()).padStart(2, "0");
+  const hour = String(bdTime.getUTCHours()).padStart(2, "0");
+  const minute = String(bdTime.getUTCMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
+function parseBdDateTimeInputValue(value: string): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  const [datePart, timePart] = value.split("T");
+  if (!datePart || !timePart) {
+    return null;
+  }
+
+  const [year, month, day] = datePart.split("-").map(Number);
+  const [hour, minute] = timePart.split(":").map(Number);
+  if ([year, month, day, hour, minute].some((item) => Number.isNaN(item))) {
+    return null;
+  }
+
+  return new Date(Date.UTC(year, month - 1, day, hour - 6, minute, 0, 0));
+}
+
+function shiftIsoDate(value: string, offsetDays: number): string {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) {
+    return value;
+  }
+
+  const next = new Date(Date.UTC(year, month - 1, day));
+  next.setUTCDate(next.getUTCDate() + offsetDays);
+  return next.toISOString().slice(0, 10);
+}
+
+function shiftBdMonth(value: string, offsetMonths: number): string {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) {
+    return value;
+  }
+
+  const next = new Date(Date.UTC(year, month - 1, day));
+  next.setUTCMonth(next.getUTCMonth() + offsetMonths);
+  return next.toISOString().slice(0, 10);
+}
+
+function shiftBdYear(value: string, offsetYears: number): string {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) {
+    return value;
+  }
+
+  const next = new Date(Date.UTC(year, month - 1, day));
+  next.setUTCFullYear(next.getUTCFullYear() + offsetYears);
+  return next.toISOString().slice(0, 10);
+}
+
 function parseApiError(error: unknown, fallback: string): string {
   if (!(error instanceof ApiError)) {
     return fallback;
@@ -84,6 +155,17 @@ function App() {
   const [completionPercentage, setCompletionPercentage] = useState(80);
   const [focusMinutes, setFocusMinutes] = useState(25);
   const [breakMinutes, setBreakMinutes] = useState(5);
+  const [manualTopic, setManualTopic] = useState("");
+  const [manualTargetStudyText, setManualTargetStudyText] = useState("");
+  const [manualActualStudyText, setManualActualStudyText] = useState("");
+  const [manualCompletionPercentage, setManualCompletionPercentage] = useState(100);
+  const [manualFocusMinutes, setManualFocusMinutes] = useState(30);
+  const [manualBreakMinutes, setManualBreakMinutes] = useState(5);
+  const [manualStudiedMinutes, setManualStudiedMinutes] = useState("");
+  const [manualStartedAt, setManualStartedAt] = useState(() => formatBdDateTimeInputValue(new Date()));
+  const [manualFinishedAt, setManualFinishedAt] = useState(() => formatBdDateTimeInputValue(new Date()));
+  const [manualEntryError, setManualEntryError] = useState("");
+  const [isManualSaving, setIsManualSaving] = useState(false);
 
   const [mode, setMode] = useState<TimerMode>("focus");
   const [secondsLeft, setSecondsLeft] = useState(25 * 60);
@@ -95,6 +177,10 @@ function App() {
   const [statusMessage, setStatusMessage] = useState("Focus on one task and make it count.");
 
   const [period, setPeriod] = useState<Period>("week");
+  const [dayReferenceDate, setDayReferenceDate] = useState<string>(() => getCurrentBdDate());
+  const [weekReferenceDate, setWeekReferenceDate] = useState<string>(() => getCurrentBdDate());
+  const [monthReferenceDate, setMonthReferenceDate] = useState<string>(() => getCurrentBdDate());
+  const [yearReferenceDate, setYearReferenceDate] = useState<string>(() => getCurrentBdDate());
   const [overview, setOverview] = useState<StatsOverview | null>(null);
   const [timeline, setTimeline] = useState<TimelineResponse | null>(null);
   const [completion, setCompletion] = useState<CompletionSnapshot | null>(null);
@@ -152,6 +238,27 @@ function App() {
     return filters;
   }, [hourFilter, dateFilter, weekFilter, yearFilter]);
 
+  const currentBdDate = useMemo(() => getCurrentBdDate(), []);
+  const statsReferenceDate = useMemo(() => {
+    if (period === "day") {
+      return dayReferenceDate;
+    }
+
+    if (period === "week") {
+      return weekReferenceDate;
+    }
+
+    if (period === "month") {
+      return monthReferenceDate;
+    }
+
+    if (period === "year") {
+      return yearReferenceDate;
+    }
+
+    return undefined;
+  }, [period, dayReferenceDate, weekReferenceDate, monthReferenceDate, yearReferenceDate]);
+
   useEffect(() => {
     secondsLeftRef.current = secondsLeft;
   }, [secondsLeft]);
@@ -192,7 +299,15 @@ function App() {
     setOvertimeSeconds(0);
     setActiveFocusSeconds(0);
     setSessionStartedAt(null);
+    setDayReferenceDate(getCurrentBdDate());
+    setWeekReferenceDate(getCurrentBdDate());
+    setMonthReferenceDate(getCurrentBdDate());
+    setYearReferenceDate(getCurrentBdDate());
     setStatusMessage(message ?? "Logged out.");
+  }
+
+  function handleAuthIssue(message: string): void {
+    setStatusMessage(message);
   }
 
   function completeAuthentication(payload: AuthResponse): void {
@@ -252,7 +367,7 @@ function App() {
       })
       .catch((error) => {
         if (error instanceof ApiError && error.status === 401) {
-          handleLogout("Your session expired. Please login again.");
+          handleAuthIssue("Your session could not be verified. Please sign in again if needed.");
           return;
         }
         setStatusMessage("Could not load presets, but custom mode is available.");
@@ -368,7 +483,7 @@ function App() {
 
     setIsLoadingStats(true);
 
-    Promise.all([getOverview(period), getTimeline(period), getCompletion()])
+    Promise.all([getOverview(period, statsReferenceDate), getTimeline(period, statsReferenceDate), getCompletion()])
       .then(([overviewData, timelineData, completionData]) => {
         setOverview(overviewData);
         setTimeline(timelineData);
@@ -376,7 +491,7 @@ function App() {
       })
       .catch((error) => {
         if (error instanceof ApiError && error.status === 401) {
-          handleLogout("Your session expired. Please login again.");
+          handleAuthIssue("Your session could not be verified. Please sign in again if needed.");
           return;
         }
         setStatusMessage("Unable to fetch some stats. Check API connectivity.");
@@ -384,7 +499,7 @@ function App() {
       .finally(() => {
         setIsLoadingStats(false);
       });
-  }, [period, authToken]);
+  }, [period, authToken, statsReferenceDate]);
 
   useEffect(() => {
     setSessionsPage(1);
@@ -409,7 +524,7 @@ function App() {
       })
       .catch((error) => {
         if (error instanceof ApiError && error.status === 401) {
-          handleLogout("Your session expired. Please login again.");
+          handleAuthIssue("Your session could not be verified. Please sign in again if needed.");
           return;
         }
         setStatusMessage("Unable to fetch session logs. Check API connectivity.");
@@ -484,8 +599,8 @@ function App() {
 
   async function refreshStats(): Promise<void> {
     const [overviewData, timelineData, completionData] = await Promise.all([
-      getOverview(period),
-      getTimeline(period),
+      getOverview(period, statsReferenceDate),
+      getTimeline(period, statsReferenceDate),
       getCompletion(),
     ]);
 
@@ -559,7 +674,7 @@ function App() {
       await Promise.all([refreshStats(), refreshSessions(1)]);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
-        handleLogout("Your session expired. Please login again.");
+        handleAuthIssue("Your session could not be verified. Please sign in again if needed.");
         return;
       }
       setStatusMessage("Could not save session. Check backend status.");
@@ -586,6 +701,115 @@ function App() {
 
     setSelectedPreset("custom");
     setBreakMinutes(parsed);
+  }
+
+  async function onSubmitManualEntry(event: FormEvent): Promise<void> {
+    event.preventDefault();
+    setManualEntryError("");
+
+    if (!manualTopic.trim()) {
+      setManualEntryError("Session title is required.");
+      return;
+    }
+
+    if (!manualTargetStudyText.trim()) {
+      setManualEntryError("Target study text is required.");
+      return;
+    }
+
+    if (!manualActualStudyText.trim()) {
+      setManualEntryError("Actual study text is required.");
+      return;
+    }
+
+    const finishedAt = parseBdDateTimeInputValue(manualFinishedAt);
+    const startedAt = parseBdDateTimeInputValue(manualStartedAt);
+    const parsedStudiedMinutes = manualStudiedMinutes.trim() === "" ? null : Number.parseFloat(manualStudiedMinutes);
+
+    if (!finishedAt) {
+      setManualEntryError("Finished time is required.");
+      return;
+    }
+
+    let resolvedStartedAt = startedAt;
+    let resolvedStudiedMinutes = parsedStudiedMinutes;
+
+    if (!resolvedStartedAt && resolvedStudiedMinutes === null) {
+      setManualEntryError("Provide a start time or studied minutes.");
+      return;
+    }
+
+    if (resolvedStartedAt && finishedAt <= resolvedStartedAt) {
+      setManualEntryError("End time must be after start time.");
+      return;
+    }
+
+    if (!resolvedStartedAt && resolvedStudiedMinutes !== null) {
+      if (Number.isNaN(resolvedStudiedMinutes) || resolvedStudiedMinutes <= 0) {
+        setManualEntryError("Studied minutes must be greater than zero.");
+        return;
+      }
+
+      resolvedStartedAt = new Date(finishedAt.getTime() - resolvedStudiedMinutes * 60 * 1000);
+    }
+
+    if (!resolvedStartedAt) {
+      setManualEntryError("Start time could not be determined.");
+      return;
+    }
+
+    const computedStudiedMinutes = Math.max(
+      1,
+      Math.round(((finishedAt.getTime() - resolvedStartedAt.getTime()) / 60000) * 100) / 100,
+    );
+
+    if (resolvedStudiedMinutes === null) {
+      resolvedStudiedMinutes = computedStudiedMinutes;
+    }
+
+    if (resolvedStudiedMinutes <= 0) {
+      setManualEntryError("Studied minutes must be greater than zero.");
+      return;
+    }
+
+    setIsManualSaving(true);
+
+    try {
+      await createSession({
+        topic: manualTopic.trim(),
+        target_study_text: manualTargetStudyText.trim(),
+        actual_study_text: manualActualStudyText.trim(),
+        completion_percentage: manualCompletionPercentage,
+        focus_minutes: manualFocusMinutes,
+        break_minutes: manualBreakMinutes,
+        studied_minutes: computedStudiedMinutes,
+        started_at: asISO(resolvedStartedAt),
+        finished_at: asISO(finishedAt),
+      });
+
+      setManualTopic("");
+      setManualTargetStudyText("");
+      setManualActualStudyText("");
+      setManualCompletionPercentage(100);
+      setManualFocusMinutes(30);
+      setManualBreakMinutes(5);
+      setManualStudiedMinutes("");
+      setManualStartedAt(formatBdDateTimeInputValue(new Date()));
+      setManualFinishedAt(formatBdDateTimeInputValue(new Date()));
+
+      setSessionsPage(1);
+      await Promise.all([refreshStats(), refreshSessions(1)]);
+      setStatusMessage("Manual session saved.");
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        handleAuthIssue("Your session could not be verified. Please sign in again if needed.");
+        return;
+      }
+
+      setManualEntryError(parseApiError(error, "Could not save the manual session."));
+    } finally {
+      setIsManualSaving(false);
+    }
   }
 
   if (!authToken) {
@@ -767,6 +991,123 @@ function App() {
             </div>
           </div>
 
+          <form className="manual-entry-form" onSubmit={onSubmitManualEntry}>
+            <div className="manual-entry-header">
+              <div>
+                <h2>Manual Log Entry</h2>
+                <p>Add a study row directly to the database without running the timer.</p>
+              </div>
+            </div>
+
+            <div className="form-grid manual-grid">
+              <label>
+                Session title
+                <input value={manualTopic} onChange={(e) => setManualTopic(e.target.value)} placeholder="e.g., Datacomm" />
+              </label>
+              <label>
+                Completion percentage
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={manualCompletionPercentage}
+                  onChange={(e) => setManualCompletionPercentage(Math.min(100, Math.max(0, Number.parseFloat(e.target.value) || 0)))}
+                />
+              </label>
+              <label className="wide-field">
+                Target study text
+                <textarea
+                  value={manualTargetStudyText}
+                  onChange={(e) => setManualTargetStudyText(e.target.value)}
+                  rows={2}
+                  placeholder="What you planned to study"
+                />
+              </label>
+              <label className="wide-field">
+                Actual study text
+                <textarea
+                  value={manualActualStudyText}
+                  onChange={(e) => setManualActualStudyText(e.target.value)}
+                  rows={3}
+                  placeholder="What you actually completed"
+                />
+              </label>
+              <label>
+                Planned focus minutes
+                <input
+                  type="number"
+                  min={1}
+                  max={240}
+                  value={manualFocusMinutes}
+                  onChange={(e) => setManualFocusMinutes(Math.max(1, Number.parseInt(e.target.value, 10) || 1))}
+                />
+              </label>
+              <label>
+                Break minutes
+                <input
+                  type="number"
+                  min={1}
+                  max={120}
+                  value={manualBreakMinutes}
+                  onChange={(e) => setManualBreakMinutes(Math.max(1, Number.parseInt(e.target.value, 10) || 1))}
+                />
+              </label>
+              <label>
+                Start time (BD)
+                <input
+                  type="datetime-local"
+                  value={manualStartedAt}
+                  onChange={(e) => setManualStartedAt(e.target.value)}
+                />
+              </label>
+              <label>
+                End time (BD)
+                <input
+                  type="datetime-local"
+                  value={manualFinishedAt}
+                  onChange={(e) => setManualFinishedAt(e.target.value)}
+                />
+              </label>
+              <label className="wide-field">
+                Studied minutes override
+                <input
+                  type="number"
+                  min={1}
+                  step="0.1"
+                  value={manualStudiedMinutes}
+                  onChange={(e) => setManualStudiedMinutes(e.target.value)}
+                  placeholder="Optional if you forgot start time"
+                />
+              </label>
+            </div>
+
+            {manualEntryError && <p className="auth-error">{manualEntryError}</p>}
+
+            <div className="manual-actions">
+              <button className="btn primary" type="submit" disabled={isManualSaving}>
+                {isManualSaving ? "Saving..." : "Save Manual Entry"}
+              </button>
+              <button
+                className="btn"
+                type="button"
+                onClick={() => {
+                  setManualTopic("");
+                  setManualTargetStudyText("");
+                  setManualActualStudyText("");
+                  setManualCompletionPercentage(100);
+                  setManualFocusMinutes(30);
+                  setManualBreakMinutes(5);
+                  setManualStudiedMinutes("");
+                  setManualStartedAt(formatBdDateTimeInputValue(new Date()));
+                  setManualFinishedAt(formatBdDateTimeInputValue(new Date()));
+                  setManualEntryError("");
+                }}
+              >
+                Reset Manual Form
+              </button>
+            </div>
+          </form>
+
           {awaitingLog && (
             <form className="completion-form" onSubmit={onSubmitCompletedStudy}>
               <h2>Log What You Actually Studied</h2>
@@ -838,6 +1179,130 @@ function App() {
               <div className="chart-grid">
                 <article className="chart-card">
                   <h3>Study Hours Timeline</h3>
+                  {period === "day" && (
+                    <>
+                      <div className="day-timeline-toolbar">
+                        <button
+                          className="btn"
+                          type="button"
+                          onClick={() => setDayReferenceDate((prev) => shiftIsoDate(prev, -1))}
+                        >
+                          Previous Day
+                        </button>
+                        <label>
+                          Day (BD)
+                          <input
+                            type="date"
+                            value={dayReferenceDate}
+                            max={currentBdDate}
+                            onChange={(e) => setDayReferenceDate(e.target.value)}
+                          />
+                        </label>
+                        <button
+                          className="btn"
+                          type="button"
+                          onClick={() => setDayReferenceDate(currentBdDate)}
+                          disabled={dayReferenceDate === currentBdDate}
+                        >
+                          Today
+                        </button>
+                      </div>
+                      <p className="timeline-note">Hourly view for {dayReferenceDate} (BD)</p>
+                    </>
+                  )}
+                  {period === "week" && (
+                    <>
+                      <div className="day-timeline-toolbar">
+                        <button
+                          className="btn"
+                          type="button"
+                          onClick={() => setWeekReferenceDate((prev) => shiftIsoDate(prev, -7))}
+                        >
+                          Previous Week
+                        </button>
+                        <label>
+                          Week anchor (BD)
+                          <input
+                            type="date"
+                            value={weekReferenceDate}
+                            max={currentBdDate}
+                            onChange={(e) => setWeekReferenceDate(e.target.value)}
+                          />
+                        </label>
+                        <button
+                          className="btn"
+                          type="button"
+                          onClick={() => setWeekReferenceDate(currentBdDate)}
+                          disabled={weekReferenceDate === currentBdDate}
+                        >
+                          This Week
+                        </button>
+                      </div>
+                      <p className="timeline-note">Weekly view anchored at {weekReferenceDate} (BD)</p>
+                    </>
+                  )}
+                  {period === "month" && (
+                    <>
+                      <div className="day-timeline-toolbar">
+                        <button
+                          className="btn"
+                          type="button"
+                          onClick={() => setMonthReferenceDate((prev) => shiftBdMonth(prev, -1))}
+                        >
+                          Previous Month
+                        </button>
+                        <label>
+                          Month anchor (BD)
+                          <input
+                            type="date"
+                            value={monthReferenceDate}
+                            max={currentBdDate}
+                            onChange={(e) => setMonthReferenceDate(e.target.value)}
+                          />
+                        </label>
+                        <button
+                          className="btn"
+                          type="button"
+                          onClick={() => setMonthReferenceDate(currentBdDate)}
+                          disabled={monthReferenceDate === currentBdDate}
+                        >
+                          This Month
+                        </button>
+                      </div>
+                      <p className="timeline-note">Monthly view anchored at {monthReferenceDate} (BD)</p>
+                    </>
+                  )}
+                  {period === "year" && (
+                    <>
+                      <div className="day-timeline-toolbar">
+                        <button
+                          className="btn"
+                          type="button"
+                          onClick={() => setYearReferenceDate((prev) => shiftBdYear(prev, -1))}
+                        >
+                          Previous Year
+                        </button>
+                        <label>
+                          Year anchor (BD)
+                          <input
+                            type="date"
+                            value={yearReferenceDate}
+                            max={currentBdDate}
+                            onChange={(e) => setYearReferenceDate(e.target.value)}
+                          />
+                        </label>
+                        <button
+                          className="btn"
+                          type="button"
+                          onClick={() => setYearReferenceDate(currentBdDate)}
+                          disabled={yearReferenceDate === currentBdDate}
+                        >
+                          This Year
+                        </button>
+                      </div>
+                      <p className="timeline-note">Yearly view anchored at {yearReferenceDate} (BD)</p>
+                    </>
+                  )}
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={timeline?.points ?? []}>
                       <CartesianGrid strokeDasharray="3 3" />

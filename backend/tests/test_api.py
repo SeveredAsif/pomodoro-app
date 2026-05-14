@@ -186,6 +186,55 @@ def test_daily_timeline_splits_session_across_bd_hours():
     assert point_13["focus_minutes"] >= 5
 
 
+def test_daily_timeline_accepts_reference_date_for_previous_day():
+    token = _register_and_get_token("DayReference")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    bd_tz = timezone(timedelta(hours=6))
+    now_bd = datetime.now(UTC).astimezone(bd_tz)
+    base_day = datetime(now_bd.year, now_bd.month, now_bd.day)
+    previous_day = base_day - timedelta(days=1)
+
+    start_bd = previous_day.replace(hour=9, minute=10, second=0)
+    end_bd = previous_day.replace(hour=9, minute=40, second=0)
+
+    start_utc = start_bd.replace(tzinfo=bd_tz).astimezone(UTC)
+    end_utc = end_bd.replace(tzinfo=bd_tz).astimezone(UTC)
+
+    payload = {
+        "topic": "Previous Day Hourly",
+        "target_study_text": "Verify reference date day timeline",
+        "actual_study_text": "Study session on previous day",
+        "completion_percentage": 85,
+        "focus_minutes": 25,
+        "break_minutes": 5,
+        "started_at": start_utc.isoformat(),
+        "finished_at": end_utc.isoformat(),
+    }
+    create_response = client.post("/api/sessions", json=payload, headers=headers)
+    assert create_response.status_code == 200
+
+    today_timeline = client.get("/api/stats/timeline", params={"period": "day"}, headers=headers)
+    assert today_timeline.status_code == 200
+    today_points = today_timeline.json()["points"]
+    today_point_09 = next((item for item in today_points if item["label"] == "09:00"), None)
+    assert today_point_09 is not None
+    assert today_point_09["focus_minutes"] == 0
+
+    reference_value = previous_day.strftime("%Y-%m-%d")
+    referenced_timeline = client.get(
+        "/api/stats/timeline",
+        params={"period": "day", "reference": reference_value},
+        headers=headers,
+    )
+    assert referenced_timeline.status_code == 200
+
+    referenced_points = referenced_timeline.json()["points"]
+    referenced_point_09 = next((item for item in referenced_points if item["label"] == "09:00"), None)
+    assert referenced_point_09 is not None
+    assert referenced_point_09["focus_minutes"] >= 30
+
+
 def test_sessions_support_pagination_and_time_filters():
     token = _register_and_get_token("FilterPagination")
     headers = {"Authorization": f"Bearer {token}"}

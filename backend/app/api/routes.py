@@ -119,6 +119,23 @@ def _normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
+def _reference_to_utc_naive(reference: str | None) -> datetime | None:
+    if reference is None:
+        return None
+
+    try:
+        reference_day = datetime.strptime(reference, "%Y-%m-%d")
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="reference must be a valid date in YYYY-MM-DD format",
+        ) from exc
+
+    # Noon avoids edge cases around day boundaries while still anchoring the same BD calendar day.
+    reference_bd = reference_day.replace(hour=12, tzinfo=BD_TIMEZONE)
+    return reference_bd.astimezone(UTC).replace(tzinfo=None)
+
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(auth_scheme),
     db: Session = Depends(get_session),
@@ -261,19 +278,23 @@ def list_sessions(
 @router.get("/stats/overview", response_model=StatsOverview)
 def stats_overview(
     period: Period = Query(default=Period.week),
+    reference: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> StatsOverview:
-    return build_overview(db, current_user.id, period)
+    reference_utc = _reference_to_utc_naive(reference)
+    return build_overview(db, current_user.id, period, now=reference_utc)
 
 
 @router.get("/stats/timeline", response_model=TimelineResponse)
 def stats_timeline(
     period: Period = Query(default=Period.week),
+    reference: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> TimelineResponse:
-    return build_timeline(db, current_user.id, period)
+    reference_utc = _reference_to_utc_naive(reference)
+    return build_timeline(db, current_user.id, period, now=reference_utc)
 
 
 @router.get("/stats/completion", response_model=CompletionSnapshot)

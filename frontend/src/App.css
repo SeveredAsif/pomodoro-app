@@ -376,6 +376,45 @@ textarea:focus {
   font-family: "Fraunces", serif;
 }
 
+.manual-entry-form {
+  margin-top: 1.1rem;
+  padding: 0.95rem;
+  border: 1px solid rgba(15, 127, 122, 0.22);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(245, 252, 250, 0.88));
+  display: grid;
+  gap: 0.8rem;
+}
+
+.manual-entry-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: flex-start;
+}
+
+.manual-entry-header h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-family: "Fraunces", serif;
+}
+
+.manual-entry-header p {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.manual-grid {
+  margin-top: 0;
+}
+
+.manual-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
 .stats-head {
   display: flex;
   justify-content: space-between;
@@ -452,6 +491,24 @@ textarea:focus {
 .chart-card h3 {
   margin: 0.2rem 0 0.6rem;
   font-size: 0.93rem;
+}
+
+.day-timeline-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.55rem;
+  margin-bottom: 0.45rem;
+}
+
+.day-timeline-toolbar label {
+  min-width: 190px;
+}
+
+.timeline-note {
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+  font-size: 0.8rem;
 }
 
 .completion-grid {
@@ -678,11 +735,20 @@ td {
     align-items: flex-start;
   }
 
+  .manual-entry-header {
+    flex-direction: column;
+  }
+
   .log-grid {
     grid-template-columns: 1fr;
   }
 
   .logs-toolbar {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .day-timeline-toolbar {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
